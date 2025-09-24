@@ -188,6 +188,115 @@ Routes được load động để tối ưu bundle size:
 4. Push to branch (`git push origin feature/amazing-feature`)
 5. Tạo Pull Request
 
+## 🧩 Quy trình GitFlow
+
+Áp dụng mô hình GitFlow để quản lý vòng đời phát triển và phát hành:
+
+- **main**: Nhánh sản phẩm ổn định (production). Chỉ nhận merge từ `release/*` hoặc `hotfix/*` sau khi đã review và tag version.
+- **develop**: Nhánh phát triển tích hợp. Tất cả tính năng mới được merge vào đây trước khi tạo bản phát hành.
+- **feature/*`**: Nhánh cho từng tính năng/issue. Tạo từ `develop`, sau khi hoàn tất tạo PR về `develop`.
+- **release/*`**: Nhánh chuẩn bị phát hành. Tạo từ `develop` khi đạt mốc (milestone). Fix bug nhỏ tại đây, sau đó merge vào `main` và back-merge vào `develop`.
+- **hotfix/*`**: Nhánh sửa lỗi khẩn cấp trên production. Tạo từ `main`, sau khi fix merge vào `main` và back-merge vào `develop`.
+
+### Quy ước đặt tên nhánh
+
+- `feature/<scope>-<short-desc>` (vd: `feature/auth-login`)
+- `release/<version>` (vd: `release/1.2.0`)
+- `hotfix/<issue>-<short-desc>` (vd: `hotfix/500-login-crash`)
+
+### Quy tắc commit message (đề xuất Conventional Commits)
+
+- `feat(scope): mô tả ngắn` (tính năng)
+- `fix(scope): mô tả ngắn` (sửa lỗi)
+- `chore/build/docs/refactor/perf/test(ci): ...`
+
+Ví dụ: `feat(auth): implement login with react-query`
+
+### Quy trình phát triển tính năng
+
+1) Tạo nhánh từ `develop`:
+
+```bash
+git fetch origin
+git checkout develop
+git pull
+git checkout -b feature/<scope>-<short-desc>
+```
+
+2) Làm việc và commit theo chuẩn; push định kỳ:
+
+```bash
+git add .
+git commit -m "feat(scope): message"
+git push -u origin feature/<scope>-<short-desc>
+```
+
+3) Tạo Pull Request vào `develop`:
+
+- Yêu cầu: đã pass CI, đã tự review, mô tả rõ ràng, gắn issue liên quan.
+- Code review tối thiểu 1–2 reviewer (tùy team).
+
+### Chuẩn bị phát hành (Release)
+
+1) Tạo nhánh release từ `develop` khi đạt mốc chức năng:
+
+```bash
+git checkout develop
+git pull
+git checkout -b release/<version>
+```
+
+2) Chỉ nhận fix bug/ci/doc nhỏ. Cập nhật version (SemVer) và CHANGELOG nếu có.
+
+3) Merge vào `main` và gắn tag:
+
+```bash
+git checkout main
+git pull
+git merge --no-ff release/<version>
+git tag -a v<version> -m "Release v<version>"
+git push origin main --tags
+```
+
+4) Back-merge lại `develop` để đồng bộ:
+
+```bash
+git checkout develop
+git pull
+git merge --no-ff release/<version>
+git push origin develop
+```
+
+### Hotfix (khẩn cấp trên production)
+
+1) Tạo nhánh từ `main`:
+
+```bash
+git checkout main
+git pull
+git checkout -b hotfix/<issue>-<short-desc>
+```
+
+2) Sửa lỗi, sau đó merge vào `main`, gắn tag patch (vd: `v1.2.1`) và back-merge vào `develop`:
+
+```bash
+git checkout main
+git merge --no-ff hotfix/<issue>-<short-desc>
+git tag -a v<patch> -m "Hotfix v<patch>"
+git push origin main --tags
+
+git checkout develop
+git merge --no-ff hotfix/<issue>-<short-desc>
+git push origin develop
+```
+
+### Quy tắc bảo vệ nhánh (Branch Protection) — khuyến nghị
+
+- Bảo vệ `main` và `develop`: cấm push trực tiếp, bắt buộc qua PR.
+- Yêu cầu CI pass, tối thiểu 1–2 review approve trước khi merge.
+- Cấm merge khi còn requested changes, yêu cầu cập nhật với `develop` mới nhất.
+- Dùng squash merge cho `feature/*` để lịch sử gọn gàng.
+
 ## 📄 License
 
 [Thêm thông tin license nếu có]
