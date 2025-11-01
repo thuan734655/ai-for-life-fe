@@ -1,0 +1,28 @@
+[
+  {
+    "title": "AI/ML Engineer",
+    "company": "DataTech Solutions",
+    "location": "TP. Hồ Chí Minh",
+    "salary_range": "35-60 triệu",
+    "experience_min": 1,
+    "skills": [
+      {"name": "python", "weight": 5},
+      {"name": "tensorflow", "weight": 4},
+      {"name": "pytorch", "weight": 4},
+      {"name": "nlp", "weight": 3}
+    ]
+  },
+  {
+    "title": "Frontend Developer (React)",
+    "company": "Digital Agency Plus",
+    "location": "Đà Nẵng",
+    "salary_range": "20-35 triệu",
+    "experience_min": 1,
+    "skills": [
+      {"name": "react", "weight": 5},
+      {"name": "next.js", "weight": 3},
+      {"name": "tailwindcss", "weight": 3},
+      {"name": "javascript", "weight": 4}
+    ]
+  }
+]

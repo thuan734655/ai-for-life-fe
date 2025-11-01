@@ -4,6 +4,73 @@ const FieldLabel = ({ children }) => (
   <label className="block text-sm font-medium text-gray-700 mb-1">{children}</label>
 );
 
+const JobCard = ({ job }) => (
+  <div className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md transition-shadow">
+    <div className="flex items-start justify-between mb-3">
+      <div className="flex-1">
+        <h3 className="text-lg font-semibold text-gray-900 mb-1">{job.title}</h3>
+        <p className="text-gray-600 text-sm">{job.company}</p>
+      </div>
+      <div className="text-right ml-4">
+        <div className="inline-flex items-center gap-2 bg-gray-900 text-white px-3 py-1 rounded-full text-sm font-medium">
+          {job.matchPercentage}% phù hợp
+        </div>
+        <div className="mt-2 w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+          <div 
+            className="h-full bg-gray-900 rounded-full"
+            style={{ width: `${job.matchPercentage}%` }}
+          />
+        </div>
+      </div>
+    </div>
+
+    <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
+      <div className="flex items-center gap-2 text-gray-600">
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        <span>{job.location}</span>
+      </div>
+      <div className="flex items-center gap-2 text-gray-600">
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+        </svg>
+        <span>{job.type}</span>
+      </div>
+      <div className="flex items-center gap-2 text-gray-600">
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span>{job.salary}</span>
+      </div>
+      <div className="flex items-center gap-2 text-gray-600">
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span>{job.postedTime}</span>
+      </div>
+    </div>
+
+    <p className="text-gray-700 text-sm mb-4 line-clamp-3">{job.description}</p>
+
+    <div className="flex flex-wrap gap-2 mb-4">
+      {job.skills.map((skill, idx) => (
+        <span key={idx} className="px-3 py-1 bg-gray-100 text-gray-700 text-xs font-medium rounded-full">
+          {skill}
+        </span>
+      ))}
+    </div>
+
+    <button className="w-full bg-gray-900 text-white py-2.5 rounded-lg font-medium hover:bg-black transition-colors flex items-center justify-center gap-2">
+      Ứng tuyển ngay
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+      </svg>
+    </button>
+  </div>
+);
+
 export const JobMatcherPage = () => {
   const [inputMode, setInputMode] = useState("manual"); // "manual" or "cv"
   const [form, setForm] = useState({
@@ -14,6 +81,9 @@ export const JobMatcherPage = () => {
   });
   const [cvFile, setCvFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [results, setResults] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [sortBy, setSortBy] = useState("match");
 
   const onChange = (e) => setForm((s) => ({ ...s, [e.target.name]: e.target.value }));
   
@@ -51,11 +121,60 @@ export const JobMatcherPage = () => {
     setCvFile(null);
   };
 
-  const onSubmit = (e) => {
+  const onSubmit = async (e) => {
     e.preventDefault();
+    setIsLoading(true);
+    
+    // Simulate API call with timeout
+    setTimeout(() => {
+      // Mock data - replace with actual API call
+      const mockResults = [
+        {
+          id: 1,
+          title: "Senior Full-stack Developer",
+          company: "Tech Innovation Co.",
+          location: "Hà Nội",
+          salary: "30-50 triệu",
+          type: "Full-time",
+          postedTime: "2 ngày trước",
+          description: "Chúng tôi đang tìm kiếm Senior Full-stack Developer có kinh nghiệm với React và Node.js để xây dựng các ứng dụng web quy mô lớn. Bạn sẽ làm việc với team năng động và có cơ hội phát triển sản phẩm AI.",
+          skills: ["React", "TypeScript", "Node.js", "PostgreSQL"],
+          matchPercentage: 95
+        },
+        {
+          id: 2,
+          title: "AI/ML Engineer",
+          company: "DataTech Solutions",
+          location: "TP. Hồ Chí Minh",
+          salary: "35-60 triệu",
+          type: "Full-time",
+          postedTime: "1 tuần trước",
+          description: "Tham gia xây dựng các giải pháp AI/ML cho khách hàng doanh nghiệp. Yêu cầu kinh nghiệm với Python, TensorFlow/PyTorch và có hiểu biết về NLP, Computer Vision.",
+          skills: ["Python", "TensorFlow", "PyTorch", "NLP"],
+          matchPercentage: 88
+        },
+        {
+          id: 3,
+          title: "Frontend Developer (React)",
+          company: "Digital Agency Plus",
+          location: "Đà Nẵng",
+          salary: "20-35 triệu",
+          type: "Full-time",
+          postedTime: "3 ngày trước",
+          description: "Tìm kiếm Frontend Developer có passion với UI/UX, thành thạo React, Next.js. Sẽ làm việc với các dự án web cho khách hàng quốc tế.",
+          skills: ["React", "Next.js", "TailwindCSS", "JavaScript"],
+          matchPercentage: 82
+        }
+      ];
+
+      setResults(mockResults);
+      setIsLoading(false);
+    }, 1500);
+
     if (inputMode === "cv") {
       if (!cvFile) {
         alert("Vui lòng upload CV");
+        setIsLoading(false);
         return;
       }
       console.log("Submitting with CV:", cvFile);
@@ -261,15 +380,43 @@ export const JobMatcherPage = () => {
             </form>
           </div>
 
-          {/* Right: Results - Empty State */}
-          <div className="bg-white rounded-2xl shadow-sm p-8 flex items-center justify-center min-h-[400px]">
-            <div className="text-center text-gray-400 max-w-sm">
-              <svg className="w-24 h-24 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-              <div className="font-medium text-gray-600 text-lg mb-2">Chưa có kết quả tìm kiếm</div>
-              <div className="text-sm text-gray-500">Vui lòng nhập thông tin để bắt đầu tìm kiếm công việc phù hợp</div>
-            </div>
+          {/* Right: Results */}
+          <div className="space-y-4">
+            {isLoading ? (
+              <div className="bg-white rounded-2xl shadow-sm p-8 flex items-center justify-center min-h-[400px]">
+                <div className="text-center">
+                  <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-gray-300 border-t-indigo-600 mb-4"></div>
+                  <div className="text-gray-600 font-medium">Đang tìm kiếm công việc phù hợp...</div>
+                </div>
+              </div>
+            ) : results ? (
+              <>
+                <div className="bg-white rounded-xl shadow-sm p-4 flex items-center justify-between">
+                  <h2 className="text-lg font-semibold text-gray-900">Công việc phù hợp</h2>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-600">Sắp xếp theo độ phù hợp</span>
+                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </div>
+                <div className="space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto pr-2">
+                  {results.map((job) => (
+                    <JobCard key={job.id} job={job} />
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="bg-white rounded-2xl shadow-sm p-8 flex items-center justify-center min-h-[400px]">
+                <div className="text-center text-gray-400 max-w-sm">
+                  <svg className="w-24 h-24 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  <div className="font-medium text-gray-600 text-lg mb-2">Chưa có kết quả tìm kiếm</div>
+                  <div className="text-sm text-gray-500">Vui lòng nhập thông tin để bắt đầu tìm kiếm công việc phù hợp</div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
