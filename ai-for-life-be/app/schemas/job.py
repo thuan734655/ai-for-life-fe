@@ -1,9 +1,22 @@
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Optional, Dict, Any
 
-class JobSkillReq(BaseModel):
-    name: str
+class JobSkillBase(BaseModel):
+    skill_id: int  # Thay name bằng skill_id
     weight: int = Field(ge=1, le=5, default=3)
+    
+    class Config:
+        orm_mode = True
+
+class JobSkillCreate(BaseModel):
+    name: str  # Chỉ dùng khi tạo mới    
+    weight: int = Field(ge=1, le=5, default=3)    
+    class Config:
+        orm_mode = True
+
+class JobSkillOut(JobSkillBase):
+    name: Optional[str] = None  # Thêm trường name tùy chọn
+    
     class Config:
         orm_mode = True
 
@@ -14,7 +27,7 @@ class JobCreate(BaseModel):
     salary_range: str | None = None
     description: str | None = None
     experience_min: int = 0
-    skills: List[JobSkillReq] = []
+    skills: List[JobSkillCreate] = []
 
 class JobOut(BaseModel):
     id: int
@@ -24,9 +37,38 @@ class JobOut(BaseModel):
     salary_range: str | None
     description: str | None
     experience_min: int
-    skills: List[JobSkillReq]
+    skills: List[JobSkillOut]  # Sử dụng JobSkillOut thay vì JobSkillReq
 
     class Config:
         from_attributes = True
-        orm_mode = True
 
+class JobSearchRequest(BaseModel):
+    title: Optional[str] = None
+    skills: List[str] = []
+    experience: Optional[int] = None
+    location: Optional[str] = None
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "title": "Backend Developer",
+                "skills": ["Python", "FastAPI", "SQL"],
+                "experience": 3,
+                "location": "Hanoi"
+            }
+        }
+class JobSearchRequest(BaseModel):
+    title: Optional[str] = None
+    skills: List[str] = []
+    experience: Optional[int] = None
+    location: Optional[str] = None
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "title": "Backend Developer",
+                "skills": ["Python", "FastAPI", "SQL"],
+                "experience": 3,
+                "location": "Hanoi"
+            }
+        }

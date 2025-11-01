@@ -1,5 +1,5 @@
-from sqlalchemy import Integer, String, ForeignKey, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column,relationship  
 from app.db.base import Base
 
 class Skill(Base):
@@ -16,7 +16,11 @@ class UserSkill(Base):
 
 class JobSkill(Base):
     __tablename__ = "job_skill_table"
-    job_id: Mapped[int] = mapped_column(ForeignKey("job_table.id"), primary_key=True)
-    skill_id: Mapped[int] = mapped_column(ForeignKey("skill_table.id"), primary_key=True)
-    weight: Mapped[int] = mapped_column(Integer, default=1)
-    __table_args__ = (UniqueConstraint("job_id", "skill_id", name="uq_job_skill"),)
+    
+    job_id = Column(Integer, ForeignKey('job_table.id'), primary_key=True)
+    skill_id = Column(Integer, ForeignKey('skill_table.id'), primary_key=True)
+    weight = Column(Integer, default=1)
+    
+    # Relationships
+    job = relationship("Job", back_populates="skills")
+    skill = relationship("Skill")

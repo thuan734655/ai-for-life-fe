@@ -11,4 +11,5 @@ engine = create_engine(
     pool_recycle=1800, #if not is_sqlite else None,
     echo=False,
 )
+print(engine)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
