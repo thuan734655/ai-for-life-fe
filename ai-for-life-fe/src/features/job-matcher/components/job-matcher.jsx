@@ -8,27 +8,38 @@ const ENDPOINTS = {
 
 const normalizeJobs = (raw) => {
   const list = Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : [];
-  return list.map((j, idx) => ({
-    id: j.id ?? j._id ?? idx,
-    title: j.title ?? j.jobTitle ?? "",
-    company: j.company ?? j.companyName ?? "",
-    location: j.location ?? j.city ?? "",
-    salary: j.salary ?? j.salaryRange ?? "",
-    type: j.type ?? j.employmentType ?? "",
-    postedTime: j.postedTime ?? j.posted_at ?? "",
-    description: j.description ?? j.summary ?? "",
-    skills: j.skills ?? j.requiredSkills ?? [],
-    matchPercentage: Math.round(
-      (j.matchPercentage ?? j.match_score ?? j.score ?? 0) * (j.matchPercentage ? 1 : 100)
-    ),
-  }));
+  return list.map((j, idx) => {
+    const rawSkills = j.skills ?? j.requiredSkills ?? [];
+    const skills = Array.isArray(rawSkills)
+      ? rawSkills
+          .map((s) => (typeof s === "string" ? s : s?.name ?? s?.skill ?? s?.label ?? s?.title ?? s?.value ?? ""))
+          .filter(Boolean)
+      : [];
+    return ({
+      id: j.id ?? j._id ?? idx,
+      title: j.title ?? j.jobTitle ?? "",
+      company: j.company ?? j.companyName ?? "",
+      location: j.location ?? j.city ?? "",
+      salary: j.salary ?? j.salary_range ?? "",
+      type: j.type ?? j.employmentType ?? "",
+      postedTime: j.postedTime ?? j.posted_at ?? "",
+      description: j.description ?? j.summary ?? "",
+      skills,
+      matchPercentage: Math.round(
+        (j.matchPercentage ?? j.match_score ?? j.score ?? 0) * (j.matchPercentage ? 1 : 100)
+      ),
+      raw: j,
+    });
+  });
 };
 
 const FieldLabel = ({ children }) => (
   <label className="block text-sm font-medium text-gray-700 mb-1">{children}</label>
 );
 
-const JobCard = ({ job }) => (
+const JobCard = ({ job }) => {
+  const [showDetails, setShowDetails] = useState(false);
+  return (
   <div className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md transition-shadow">
     <div className="flex items-start justify-between mb-3">
       <div className="flex-1">
@@ -86,14 +97,28 @@ const JobCard = ({ job }) => (
       ))}
     </div>
 
-    <button className="w-full bg-gray-900 text-white py-2.5 rounded-lg font-medium hover:bg-black transition-colors flex items-center justify-center gap-2">
-      Ứng tuyển ngay
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-      </svg>
-    </button>
+    {showDetails && (
+      <div className="mt-3">
+        <pre className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs overflow-auto max-h-60">
+{JSON.stringify(job.raw ?? job, null, 2)}
+        </pre>
+      </div>
+    )}
+
+    <div className="flex gap-3 mt-2">
+      <button className="flex-1 bg-gray-900 text-white py-2.5 rounded-lg font-medium hover:bg-black transition-colors flex items-center justify-center gap-2">
+        Ứng tuyển ngay
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+        </svg>
+      </button>
+      <button type="button" onClick={() => setShowDetails((v) => !v)} className="px-3 py-2.5 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">
+        {showDetails ? "Ẩn chi tiết" : "Chi tiết"}
+      </button>
+    </div>
   </div>
-);
+  );
+};
 
 export const JobMatcherPage = () => {
   const [inputMode, setInputMode] = useState("manual"); // "manual" or "cv"
@@ -106,6 +131,7 @@ export const JobMatcherPage = () => {
   const [cvFile, setCvFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [results, setResults] = useState(null);
+  const [lastQuery, setLastQuery] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [sortBy, setSortBy] = useState("match");
 
@@ -169,10 +195,11 @@ export const JobMatcherPage = () => {
         }
         const data = await res.json().catch(() => ({}));
         setResults(normalizeJobs(data));
+        setLastQuery({ mode: "cv", fileName: cvFile?.name || "CV.pdf" });
       } else {
         const payload = {
           position: form.position,
-          skills: form.skills,
+          skills: form.skills.split(',').map(skill => skill.trim()).filter(Boolean),
           years: form.years,
           summary: form.summary,
         };
@@ -189,6 +216,7 @@ export const JobMatcherPage = () => {
         }
         const data = await res.json().catch(() => ({}));
         setResults(normalizeJobs(data));
+        setLastQuery({ mode: "manual", ...payload });
       }
     } catch (err) {
       console.error("[JobMatcher] API error:", err);
@@ -405,7 +433,7 @@ export const JobMatcherPage = () => {
             ) : results ? (
               <>
                 <div className="bg-white rounded-xl shadow-sm p-4 flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-gray-900">Công việc phù hợp</h2>
+                  <h2 className="text-lg font-semibold text-gray-900">Công việc phù hợp ({results.length})</h2>
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-gray-600">Sắp xếp theo độ phù hợp</span>
                     <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -413,6 +441,29 @@ export const JobMatcherPage = () => {
                     </svg>
                   </div>
                 </div>
+                {lastQuery && (
+                  <div className="bg-white rounded-xl shadow-sm p-4">
+                    <div className="text-sm text-gray-700 font-medium mb-2">Thông tin tìm kiếm</div>
+                    {lastQuery.mode === "manual" ? (
+                      <div className="flex flex-wrap gap-2 text-sm">
+                        {lastQuery.position && (
+                          <span className="px-3 py-1 bg-gray-100 rounded-full">Vị trí: <span className="font-medium">{lastQuery.position}</span></span>
+                        )}
+                        {Array.isArray(lastQuery.skills) && lastQuery.skills.length > 0 && (
+                          <span className="px-3 py-1 bg-gray-100 rounded-full">Kỹ năng: <span className="font-medium">{lastQuery.skills.join(', ')}</span></span>
+                        )}
+                        {lastQuery.years && (
+                          <span className="px-3 py-1 bg-gray-100 rounded-full">Kinh nghiệm: <span className="font-medium">{lastQuery.years}</span></span>
+                        )}
+                        {lastQuery.summary && (
+                          <span className="px-3 py-1 bg-gray-100 rounded-full">Tóm tắt: <span className="font-medium">{lastQuery.summary}</span></span>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-gray-600">Nguồn: CV ({lastQuery.fileName})</div>
+                    )}
+                  </div>
+                )}
                 <div className="space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto pr-2">
                   {results.map((job) => (
                     <JobCard key={job.id} job={job} />
