@@ -1,5 +1,29 @@
 import React, { useState } from "react";
 
+const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/";
+const ENDPOINTS = {
+  matchManual: "jobs/search",
+  matchCV: "job-matcher/match-cv",
+};
+
+const normalizeJobs = (raw) => {
+  const list = Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : [];
+  return list.map((j, idx) => ({
+    id: j.id ?? j._id ?? idx,
+    title: j.title ?? j.jobTitle ?? "",
+    company: j.company ?? j.companyName ?? "",
+    location: j.location ?? j.city ?? "",
+    salary: j.salary ?? j.salaryRange ?? "",
+    type: j.type ?? j.employmentType ?? "",
+    postedTime: j.postedTime ?? j.posted_at ?? "",
+    description: j.description ?? j.summary ?? "",
+    skills: j.skills ?? j.requiredSkills ?? [],
+    matchPercentage: Math.round(
+      (j.matchPercentage ?? j.match_score ?? j.score ?? 0) * (j.matchPercentage ? 1 : 100)
+    ),
+  }));
+};
+
 const FieldLabel = ({ children }) => (
   <label className="block text-sm font-medium text-gray-700 mb-1">{children}</label>
 );
@@ -124,64 +148,53 @@ export const JobMatcherPage = () => {
   const onSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    
-    // Simulate API call with timeout
-    setTimeout(() => {
-      // Mock data - replace with actual API call
-      const mockResults = [
-        {
-          id: 1,
-          title: "Senior Full-stack Developer",
-          company: "Tech Innovation Co.",
-          location: "Hà Nội",
-          salary: "30-50 triệu",
-          type: "Full-time",
-          postedTime: "2 ngày trước",
-          description: "Chúng tôi đang tìm kiếm Senior Full-stack Developer có kinh nghiệm với React và Node.js để xây dựng các ứng dụng web quy mô lớn. Bạn sẽ làm việc với team năng động và có cơ hội phát triển sản phẩm AI.",
-          skills: ["React", "TypeScript", "Node.js", "PostgreSQL"],
-          matchPercentage: 95
-        },
-        {
-          id: 2,
-          title: "AI/ML Engineer",
-          company: "DataTech Solutions",
-          location: "TP. Hồ Chí Minh",
-          salary: "35-60 triệu",
-          type: "Full-time",
-          postedTime: "1 tuần trước",
-          description: "Tham gia xây dựng các giải pháp AI/ML cho khách hàng doanh nghiệp. Yêu cầu kinh nghiệm với Python, TensorFlow/PyTorch và có hiểu biết về NLP, Computer Vision.",
-          skills: ["Python", "TensorFlow", "PyTorch", "NLP"],
-          matchPercentage: 88
-        },
-        {
-          id: 3,
-          title: "Frontend Developer (React)",
-          company: "Digital Agency Plus",
-          location: "Đà Nẵng",
-          salary: "20-35 triệu",
-          type: "Full-time",
-          postedTime: "3 ngày trước",
-          description: "Tìm kiếm Frontend Developer có passion với UI/UX, thành thạo React, Next.js. Sẽ làm việc với các dự án web cho khách hàng quốc tế.",
-          skills: ["React", "Next.js", "TailwindCSS", "JavaScript"],
-          matchPercentage: 82
+    try {
+      if (inputMode === "cv") {
+        if (!cvFile) {
+          alert("Vui lòng upload CV");
+          setIsLoading(false);
+          return;
         }
-      ];
-
-      setResults(mockResults);
-      setIsLoading(false);
-    }, 1500);
-
-    if (inputMode === "cv") {
-      if (!cvFile) {
-        alert("Vui lòng upload CV");
-        setIsLoading(false);
-        return;
+        const fd = new FormData();
+        fd.append("file", cvFile);
+        const url = `${API_BASE}${ENDPOINTS.matchCV}`;
+        console.log("[JobMatcher] POST", url);
+        const res = await fetch(url, {
+          method: "POST",
+          body: fd,
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`HTTP ${res.status} ${res.statusText} - ${text}`);
+        }
+        const data = await res.json().catch(() => ({}));
+        setResults(normalizeJobs(data));
+      } else {
+        const payload = {
+          position: form.position,
+          skills: form.skills,
+          years: form.years,
+          summary: form.summary,
+        };
+        const url = `${API_BASE}${ENDPOINTS.matchManual}`;
+        console.log("[JobMatcher] POST", url, JSON.stringify(payload, null, 2));
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`HTTP ${res.status} ${res.statusText} - ${text}`);
+        }
+        const data = await res.json().catch(() => ({}));
+        setResults(normalizeJobs(data));
       }
-      console.log("Submitting with CV:", cvFile);
-      // TODO: call API to scan CV and match jobs
-    } else {
-      console.log("Submitting manual form:", form);
-      // TODO: call API to match jobs with manual input
+    } catch (err) {
+      console.error("[JobMatcher] API error:", err);
+      alert(`Có lỗi khi gọi API. Vui lòng thử lại.\n\n${err?.message ?? err}`);
+    } finally {
+      setIsLoading(false);
     }
   };
 

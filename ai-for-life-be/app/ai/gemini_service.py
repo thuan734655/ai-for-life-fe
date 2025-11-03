@@ -16,68 +16,85 @@ genai.configure(api_key=GEMINI_API_KEY)
 
 
 # Initialize the Gemini model
-model = genai.GenerativeModel('gemini-pro')
+model = genai.GenerativeModel('gemini-2.5-flash')
+response = model.generate_content("Explain how AI works in a few words")
+
 
 def match_jobs_with_ai(search_request: Dict[str, Any], jobs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Match jobs with the search request using Gemini AI
-    Returns a list of jobs with similarity scores
+    Match jobs with the search request using a scoring system
+    Returns a list of jobs with match scores
     """
     try:
-        # Prepare the prompt for Gemini
-        prompt = f"""You are an AI job matching assistant. 
-        Rate the relevance of each job based on the following search criteria:
+        matched_jobs = []
         
-        Search Criteria:
-        - Title: {search_request.get('title', 'Not specified')}
-        - Skills: {', '.join(search_request.get('skills', []))}
-        - Experience: {search_request.get('experience', 'Not specified')} years
-        - Location: {search_request.get('location', 'Not specified')}
-        
-        For each job, provide a relevance score from 0 to 1 based on how well it matches the criteria.
-        Consider the job title, required skills, experience level, and location in your assessment.
-        
-        Jobs to evaluate:
-        """
-        
-        # Add job details to the prompt
-        for i, job in enumerate(jobs):
-            job_skills = [skill['name'] for skill in job.get('skills', [])]
-            prompt += f"""
-            Job {i+1}:
-            - Title: {job.get('title')}
-            - Company: {job.get('company')}
-            - Location: {job.get('location')}
-            - Experience Required: {job.get('experience_min', 0)} years
-            - Skills: {', '.join(job_skills) if job_skills else 'Not specified'}
-            - Description: {job.get('description', '')[:200]}...
+        for job in jobs:
+            score = 0.0
+            reasons = []
             
-            Relevance Score (0-1): """
+            # 1. Title match (30% weight)
+            if search_request.get('title'):
+                title_similarity = calculate_similarity(
+                    search_request['title'].lower(),
+                    job.get('title', '').lower()
+                )
+                score += title_similarity * 0.3
+                reasons.append(f"Title similarity: {title_similarity:.2f}")
+            
+            # 2. Skills match (40% weight)
+            if search_request.get('skills'):
+                job_skills = {s['name'].lower() for s in job.get('skills', [])}
+                search_skills = {s.lower() for s in search_request['skills']}
+                
+                if job_skills and search_skills:
+                    skill_match_ratio = len(job_skills.intersection(search_skills)) / len(search_skills)
+                    score += skill_match_ratio * 0.4
+                    reasons.append(f"Skills match: {skill_match_ratio:.2f}")
+            
+            # 3. Experience match (20% weight)
+            if search_request.get('experience') is not None:
+                exp_required = job.get('experience_min', 0)
+                exp_have = search_request['experience']
+                
+                if exp_have >= exp_required:
+                    exp_score = 1.0  # Full score if meets or exceeds
+                elif exp_required > 0:
+                    exp_score = exp_have / exp_required  # Partial score based on ratio
+                else:
+                    exp_score = 0.5  # Default score if no experience required
+                
+                score += exp_score * 0.2
+                reasons.append(f"Experience score: {exp_score:.2f}")
+            
+            # 4. Location match (10% weight)
+            if search_request.get('location'):
+                location_match = search_request['location'].lower() in job.get('location', '').lower()
+                score += 0.1 if location_match else 0
+                reasons.append(f"Location match: {location_match}")
+            
+            # Ensure score is between 0 and 1
+            score = max(0, min(1, score))
+            
+            # Add match details to job
+            job['match_score'] = round(score, 2)
+            job['match_reasons'] = reasons
+            
+            # Only include jobs that meet minimum criteria
+            if score >= 0.4:  # Adjust threshold as needed
+                matched_jobs.append(job)
         
-        # Get response from Gemini
-        print(prompt)
-        response = model.generate_content(prompt)
-        
-        # Parse the response to extract scores
-        scores = []
-        for line in response.text.split('\n'):
-            if 'Relevance Score' in line or ':' in line:
-                try:
-                    score = float(line.split(':')[-1].strip())
-                    scores.append(min(max(score, 0), 1))  # Ensure score is between 0 and 1
-                except (ValueError, IndexError):
-                    continue
-        
-        # Add scores to jobs
-        for i, job in enumerate(jobs):
-            job['match_score'] = scores[i] if i < len(scores) else 0.0
-        
-        # Sort jobs by match score in descending order
-        return sorted(jobs, key=lambda x: x.get('match_score', 0), reverse=True)
+        # Sort by score in descending order
+        return sorted(matched_jobs, key=lambda x: x['match_score'], reverse=True)
         
     except Exception as e:
-        print(f"Error in AI job matching: {str(e)}")
+        print(f"Error in job matching: {str(e)}")
         # Fallback: return jobs with default score
         for job in jobs:
             job['match_score'] = 0.5
+            job['match_reasons'] = ["Error in matching"]
         return jobs
+
+def calculate_similarity(str1: str, str2: str) -> float:
+    """Calculate similarity ratio between two strings"""
+    from difflib import SequenceMatcher
+    return SequenceMatcher(None, str1, str2).ratio()
