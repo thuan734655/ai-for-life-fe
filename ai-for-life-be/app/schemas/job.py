@@ -1,5 +1,7 @@
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
+from pydantic import BaseModel, Field, HttpUrl
+from typing import List, Optional, Dict, Any, Union
+from fastapi import UploadFile, File
+import re
 
 class JobSkillBase(BaseModel):
     skill_id: int  # Thay name bằng skill_id

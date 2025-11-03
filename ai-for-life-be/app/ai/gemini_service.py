@@ -1,8 +1,10 @@
 import os
-from django.conf import settings
 import google.generativeai as genai
 from typing import List, Dict, Any
 from dotenv import load_dotenv
+import tempfile
+import time
+import json
 
 # Load environment variables
 load_dotenv()
@@ -15,9 +17,119 @@ if not GEMINI_API_KEY:
 genai.configure(api_key=GEMINI_API_KEY)
 
 
-# Initialize the Gemini model
+# Initialize the Gemini model (no calls at import time)
 model = genai.GenerativeModel('gemini-2.5-flash')
-response = model.generate_content("Explain how AI works in a few words")
+
+
+def extract_text_from_pdf_ai_bytes(content: bytes) -> str:
+    """Extract plain text from a PDF using Gemini (file bytes input)."""
+    try:
+        # Write to a temporary file and CLOSE it before upload (Windows safe)
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                tmp.write(content)
+                tmp.flush()
+                tmp_path = tmp.name
+        finally:
+            pass
+        uploaded = genai.upload_file(path=tmp_path, mime_type="application/pdf")
+
+        # Wait until uploaded file is processed (ACTIVE)
+        for _ in range(30):
+            file_info = genai.get_file(uploaded.name)
+            if getattr(file_info, 'state', '') == 'ACTIVE':
+                break
+            time.sleep(1)
+
+        prompt = (
+            "Extract the plain textual content from this PDF resume. "
+            "Return only raw text without extra formatting or commentary."
+        )
+        resp = model.generate_content([uploaded, prompt])
+        return (resp.text or "").strip()
+    except Exception as e:
+        raise RuntimeError(f"Gemini PDF text extraction failed: {e}")
+    finally:
+        # Cleanup temp file
+        try:
+            if 'tmp_path' in locals() and tmp_path and os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception:
+            pass
+
+
+def extract_resume_info_ai(content: bytes) -> Dict[str, Any]:
+    """Extract structured resume info (title, skills, experience years) from a PDF using Gemini.
+
+    Returns dict with keys: title (str|None), skills (list[str]), experience (int|None)
+    """
+    try:
+        # Write to temp file and close before upload (Windows safe)
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                tmp.write(content)
+                tmp.flush()
+                tmp_path = tmp.name
+        finally:
+            pass
+        uploaded = genai.upload_file(path=tmp_path, mime_type="application/pdf")
+
+        # Wait ACTIVE
+        for _ in range(30):
+            file_info = genai.get_file(uploaded.name)
+            if getattr(file_info, 'state', '') == 'ACTIVE':
+                break
+            time.sleep(1)
+
+        prompt = (
+            "You are an expert CV parser. Read the attached resume PDF and extract: "
+            "1) desired job title or target position (short). "
+            "2) a concise list of technical skills (as simple strings, lowercase). "
+            "3) total years of professional experience as an integer (estimate if needed). "
+            "Return JSON with keys: title, skills, experience. Do not add any commentary."
+        )
+
+        resp = model.generate_content([uploaded, prompt])
+        raw = (resp.text or "").strip()
+        data: Dict[str, Any] = {"title": None, "skills": [], "experience": None}
+        try:
+            data.update(json.loads(raw))
+        except Exception:
+            # Try to coerce if the model wrapped in code fences
+            if "{" in raw and "}" in raw:
+                snippet = raw[raw.find("{") : raw.rfind("}") + 1]
+                try:
+                    data.update(json.loads(snippet))
+                except Exception:
+                    pass
+        # Normalize types
+        title = data.get("title")
+        if isinstance(title, str):
+            title = title.strip()[:160]
+        else:
+            title = None
+        skills = data.get("skills") or []
+        if isinstance(skills, list):
+            skills = [str(s).strip().lower() for s in skills if str(s).strip()]
+        else:
+            skills = []
+        exp = data.get("experience")
+        try:
+            exp = int(exp) if exp is not None else None
+        except Exception:
+            exp = None
+        return {"title": title, "skills": skills, "experience": exp}
+    except Exception as e:
+        raise RuntimeError(f"Gemini resume info extraction failed: {e}")
+    finally:
+        # Cleanup temp file
+        try:
+            if 'tmp_path' in locals() and tmp_path and os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception:
+            pass
 
 
 def match_jobs_with_ai(search_request: Dict[str, Any], jobs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

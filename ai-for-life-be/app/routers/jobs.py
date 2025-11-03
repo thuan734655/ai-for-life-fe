@@ -1,9 +1,10 @@
 from typing import Any, Dict, List
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
 from app.schemas.job import JobCreate, JobOut, JobSearchRequest
 from app.crud.job import create_job, list_jobs, search_jobs_ai
+from app.services.pdf_processor import process_resume_pdf
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -21,6 +22,7 @@ def create(payload: JobCreate, db: Session = Depends(get_db)):
 @router.get("", response_model=list[JobOut])
 def get_all(db: Session = Depends(get_db)):
     return list_jobs(db)
+
 @router.post("/search", response_model=List[Dict[str, Any]])
 async def search_jobs(
     search_request: JobSearchRequest,
@@ -41,3 +43,26 @@ async def search_jobs(
             status_code=500,
             detail=f"Error searching for jobs: {str(e)}"
         )
+
+@router.post("/upload-resume", response_model=List[Dict[str, Any]])
+async def upload_resume(
+    file: UploadFile = File(...),
+    desired_position: str | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Upload a PDF resume and return matching jobs.
+    - file: PDF file
+    - desired_position: optional
+    """
+    try:
+        matches = process_resume_pdf(
+            db=db,
+            file=file,
+            desired_position=desired_position,
+        )
+        return matches
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing resume: {str(e)}")

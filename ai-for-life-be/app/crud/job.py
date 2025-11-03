@@ -67,7 +67,7 @@ def search_jobs_ai(db: Session, search_request: JobSearchRequest) -> List[Dict[s
     
     # Get AI-matched jobs with scores
     matched_jobs = match_jobs_with_ai(search_criteria, job_dicts)
-    
+    print(matched_jobs)
     # Filter out low-scoring jobs (optional)
     matched_jobs = [job for job in matched_jobs if job.get('match_score', 0) > 0.3]
     
