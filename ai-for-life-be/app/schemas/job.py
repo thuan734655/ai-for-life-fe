@@ -8,19 +8,19 @@ class JobSkillBase(BaseModel):
     weight: int = Field(ge=1, le=5, default=3)
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class JobSkillCreate(BaseModel):
     name: str  # Chỉ dùng khi tạo mới    
     weight: int = Field(ge=1, le=5, default=3)    
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class JobSkillOut(JobSkillBase):
     name: Optional[str] = None  # Thêm trường name tùy chọn
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class JobCreate(BaseModel):
     title: str
@@ -51,22 +51,7 @@ class JobSearchRequest(BaseModel):
     location: Optional[str] = None
     
     class Config:
-        schema_extra = {
-            "example": {
-                "title": "Backend Developer",
-                "skills": ["Python", "FastAPI", "SQL"],
-                "experience": 3,
-                "location": "Hanoi"
-            }
-        }
-class JobSearchRequest(BaseModel):
-    title: Optional[str] = None
-    skills: List[str] = []
-    experience: Optional[int] = None
-    location: Optional[str] = None
-    
-    class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "title": "Backend Developer",
                 "skills": ["Python", "FastAPI", "SQL"],

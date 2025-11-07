@@ -11,19 +11,17 @@ load_dotenv()
 
 # Configure Gemini API
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if not GEMINI_API_KEY:
-    raise ValueError("GEMINI_API_KEY environment variable is not set")
-
-genai.configure(api_key=GEMINI_API_KEY)
-
-
-# Initialize the Gemini model (no calls at import time)
-model = genai.GenerativeModel('gemini-2.5-flash')
+model = None
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel('gemini-2.5-flash')
 
 
 def extract_text_from_pdf_ai_bytes(content: bytes) -> str:
     """Extract plain text from a PDF using Gemini (file bytes input)."""
     try:
+        if model is None:
+            raise RuntimeError("Gemini not configured. Set GEMINI_API_KEY to enable PDF extraction.")
         # Write to a temporary file and CLOSE it before upload (Windows safe)
         tmp_path = None
         try:
@@ -65,6 +63,8 @@ def extract_resume_info_ai(content: bytes) -> Dict[str, Any]:
     Returns dict with keys: title (str|None), skills (list[str]), experience (int|None)
     """
     try:
+        if model is None:
+            raise RuntimeError("Gemini not configured. Set GEMINI_API_KEY to enable resume parsing.")
         # Write to temp file and close before upload (Windows safe)
         tmp_path = None
         try:

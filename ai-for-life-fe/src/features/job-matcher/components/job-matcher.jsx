@@ -4,6 +4,7 @@ const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/";
 const ENDPOINTS = {
   matchManual: "jobs/search",
   matchCV: "job-matcher/match-cv",
+  uploadResume: "jobs/upload-resume",
 };
 
 const normalizeJobs = (raw) => {
@@ -141,6 +142,45 @@ export const JobMatcherPage = () => {
     const file = e.target.files?.[0];
     if (file && (file.type === "application/pdf" || file.name.endsWith(".pdf"))) {
       setCvFile(file);
+      // Immediately upload to extract JD info
+      (async () => {
+        try {
+          const fd = new FormData();
+          fd.append("file", file);
+          fd.append("desired_position", form.position || "");
+          const url = `${API_BASE}${ENDPOINTS.uploadResume}`;
+          console.log("[JobMatcher] POST", url);
+          const res = await fetch(url, { method: "POST", body: fd });
+          if (!res.ok) {
+            const text = await res.text();
+            throw new Error(`HTTP ${res.status} ${res.statusText} - ${text}`);
+          }
+          const data = await res.json().catch(() => ({}));
+          // Normalize potential response fields
+          const position = data.position || data.jobTitle || data.title || "";
+          const skillsRaw = data.skills || data.requiredSkills || data.keywords || [];
+          const skills = Array.isArray(skillsRaw)
+            ? skillsRaw
+                .map((s) => (typeof s === "string" ? s : s?.name ?? s?.skill ?? s?.label ?? s?.title ?? s?.value ?? ""))
+                .filter(Boolean)
+            : [];
+          const years = data.years || data.experienceYears || data.experience || "";
+          const summary = data.summary || data.description || data.overview || "";
+
+          // Prefill form and show JD info summary like manual mode
+          setForm((s) => ({
+            ...s,
+            position,
+            skills: skills.join(", "),
+            years,
+            summary,
+          }));
+          setLastQuery({ mode: "manual", position, skills, years, summary });
+        } catch (err) {
+          console.error("[JobMatcher] Upload resume API error:", err);
+          alert(`Có lỗi khi trích xuất thông tin từ CV. Vui lòng thử lại.\n\n${err?.message ?? err}`);
+        }
+      })();
     } else if (file) {
       alert("Vui lòng chọn file PDF");
     }
@@ -162,6 +202,42 @@ export const JobMatcherPage = () => {
     const file = e.dataTransfer.files?.[0];
     if (file && (file.type === "application/pdf" || file.name.endsWith(".pdf"))) {
       setCvFile(file);
+      // Upload dropped file to extract JD info
+      (async () => {
+        try {
+          const fd = new FormData();
+          fd.append("file", file);
+          const url = `${API_BASE}${ENDPOINTS.uploadResume}`;
+          console.log("[JobMatcher] POST", url);
+          const res = await fetch(url, { method: "POST", body: fd });
+          if (!res.ok) {
+            const text = await res.text();
+            throw new Error(`HTTP ${res.status} ${res.statusText} - ${text}`);
+          }
+          const data = await res.json().catch(() => ({}));
+          const position = data.position || data.jobTitle || data.title || "";
+          const skillsRaw = data.skills || data.requiredSkills || data.keywords || [];
+          const skills = Array.isArray(skillsRaw)
+            ? skillsRaw
+                .map((s) => (typeof s === "string" ? s : s?.name ?? s?.skill ?? s?.label ?? s?.title ?? s?.value ?? ""))
+                .filter(Boolean)
+            : [];
+          const years = data.years || data.experienceYears || data.experience || "";
+          const summary = data.summary || data.description || data.overview || "";
+
+          setForm((s) => ({
+            ...s,
+            position,
+            skills: skills.join(", "),
+            years,
+            summary,
+          }));
+          setLastQuery({ mode: "manual", position, skills, years, summary });
+        } catch (err) {
+          console.error("[JobMatcher] Upload resume API error:", err);
+          alert(`Có lỗi khi trích xuất thông tin từ CV. Vui lòng thử lại.\n\n${err?.message ?? err}`);
+        }
+      })();
     } else if (file) {
       alert("Vui lòng chọn file PDF");
     }
@@ -183,7 +259,8 @@ export const JobMatcherPage = () => {
         }
         const fd = new FormData();
         fd.append("file", cvFile);
-        const url = `${API_BASE}${ENDPOINTS.matchCV}`;
+        fd.append("desired_position", form.position || "");
+        const url = `${API_BASE}${ENDPOINTS.uploadResume}`;
         console.log("[JobMatcher] POST", url);
         const res = await fetch(url, {
           method: "POST",
@@ -353,6 +430,26 @@ export const JobMatcherPage = () => {
                           />
                         </svg>
                       </button>
+                    </div>
+                  </div>
+                )}
+                {/* Extracted JD info summary (from uploaded CV) */}
+                {lastQuery?.mode === "manual" && (
+                  <div className="mt-4 border border-gray-200 rounded-xl p-4 bg-white">
+                    <div className="text-sm text-gray-700 font-medium mb-2">Thông tin JD trích xuất</div>
+                    <div className="flex flex-wrap gap-2 text-sm">
+                      {lastQuery.position && (
+                        <span className="px-3 py-1 bg-gray-100 rounded-full">Vị trí: <span className="font-medium">{lastQuery.position}</span></span>
+                      )}
+                      {Array.isArray(lastQuery.skills) && lastQuery.skills.length > 0 && (
+                        <span className="px-3 py-1 bg-gray-100 rounded-full">Kỹ năng: <span className="font-medium">{lastQuery.skills.join(', ')}</span></span>
+                      )}
+                      {lastQuery.years && (
+                        <span className="px-3 py-1 bg-gray-100 rounded-full">Kinh nghiệm: <span className="font-medium">{lastQuery.years}</span></span>
+                      )}
+                      {lastQuery.summary && (
+                        <span className="px-3 py-1 bg-gray-100 rounded-full">Tóm tắt: <span className="font-medium">{lastQuery.summary}</span></span>
+                      )}
                     </div>
                   </div>
                 )}
