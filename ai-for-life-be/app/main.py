@@ -5,6 +5,8 @@ from app.core.config import settings
 from app.db.base import Base
 from app.db.session import engine
 from app.routers import jobs, users, match
+from app.models import job as _m_job, skill as _m_skill, user as _m_user  # noqa: F401
+from app.models import embedding as _m_embedding  # noqa: F401
 
 
 def init_db():

@@ -210,3 +210,45 @@ def calculate_similarity(str1: str, str2: str) -> float:
     """Calculate similarity ratio between two strings"""
     from difflib import SequenceMatcher
     return SequenceMatcher(None, str1, str2).ratio()
+
+
+def choose_best_job_from_candidates(search_summary: str, candidates: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Ask Gemini to pick the single best job from top-k candidates.
+    Returns a dict with keys: best_job_id, reason. If Gemini isn't configured, fall back to first candidate.
+    """
+    try:
+        if not candidates:
+            return {"best_job_id": None, "reason": "No candidates"}
+        if model is None:
+            # Fallback: choose top-1 by embedding_similarity or first
+            best = sorted(candidates, key=lambda x: x.get("embedding_similarity", 0), reverse=True)[0]
+            return {"best_job_id": best.get("id"), "reason": "Gemini not configured"}
+
+        prompt = (
+            "You are an expert recruiter. Given a candidate overview and a list of job postings, "
+            "choose the single best matching job. Respond strictly in JSON with keys: best_job_id (number) and reason (string).\n\n"
+            f"Candidate overview:\n{search_summary}\n\n"
+            f"Jobs (JSON array):\n{json.dumps(candidates, ensure_ascii=False)[:120000]}\n\n"
+            "Return only JSON."
+        )
+        resp = model.generate_content(prompt)
+        raw = (getattr(resp, 'text', None) or "").strip()
+        try:
+            data = json.loads(raw)
+        except Exception:
+            if "{" in raw and "}" in raw:
+                snippet = raw[raw.find("{") : raw.rfind("}") + 1]
+                data = json.loads(snippet)
+            else:
+                raise
+        best_job_id = data.get("best_job_id")
+        reason = data.get("reason", "")
+        return {"best_job_id": best_job_id, "reason": reason}
+    except Exception as e:
+        # Fail-soft
+        try:
+            best = sorted(candidates, key=lambda x: x.get("embedding_similarity", 0), reverse=True)[0]
+            return {"best_job_id": best.get("id"), "reason": f"Fallback due to error: {e}"}
+        except Exception:
+            return {"best_job_id": None, "reason": f"Error: {e}"}

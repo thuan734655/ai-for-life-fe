@@ -6,8 +6,9 @@ from fastapi import UploadFile, HTTPException
 from sqlalchemy.orm import Session
 
 from app.schemas.job import JobSearchRequest
-from app.crud.job import search_jobs_ai
-from app.ai.gemini_service import extract_text_from_pdf_ai_bytes, extract_resume_info_ai
+from app.crud.job import search_jobs_ai, top_k_jobs_by_embedding
+from app.ai.gemini_service import extract_text_from_pdf_ai_bytes, extract_resume_info_ai, choose_best_job_from_candidates
+from app.ai.embedding_service import get_query_embedding
 
 try:
     import spacy
@@ -181,6 +182,34 @@ def process_resume_pdf(
     )
     print(search_request)
 
-    matched = search_jobs_ai(db, search_request)
+    # Build a short summary text for the candidate query
+    parts = []
+    if ai_title:
+        parts.append(f"title: {ai_title}")
+    if ai_skills:
+        parts.append("skills: " + ", ".join(ai_skills[:30]))
+    if ai_exp is not None:
+        parts.append(f"experience: {ai_exp} years")
+    query_text = " | ".join(parts) if parts else (desired_position or "")
 
-    return matched
+    # Compute query embedding and retrieve top-20 similar jobs
+    query_emb = get_query_embedding(query_text)
+    top20 = top_k_jobs_by_embedding(db, query_emb, k=20)
+
+    # If no embeddings available yet, fallback to rules-based match
+    candidates = top20 if top20 else search_jobs_ai(db, search_request)[:20]
+
+    # Ask Gemini to choose best among candidates
+    best = choose_best_job_from_candidates(query_text, candidates)
+    best_id = best.get("best_job_id")
+    reason = best.get("reason", "")
+
+    # Mark the best candidate
+    for c in candidates:
+        if c.get("id") == best_id:
+            c["is_best"] = True
+            c["best_reason"] = reason
+        else:
+            c["is_best"] = False
+
+    return candidates
