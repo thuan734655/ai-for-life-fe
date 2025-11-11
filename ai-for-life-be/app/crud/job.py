@@ -7,6 +7,7 @@ from app.schemas.job import JobCreate, JobSearchRequest
 from app.crud.skill import get_or_create_skill
 from app.models.embedding import JobEmbedding
 from app.ai.embedding_service import get_text_embedding, cosine_similarity, build_jd_text
+from app.ai.embedding_service import build_query_text, get_query_embedding
 import json
 
 def create_job(db: Session, payload: JobCreate) -> Job:
@@ -57,40 +58,51 @@ def search_jobs_ai(db: Session, search_request: JobSearchRequest) -> List[Dict[s
     """
     Search for jobs using AI-powered matching
     """
-    # First, get all jobs with their skills
-    jobs = db.query(Job).options(
-        joinedload(Job.skills).joinedload(JobSkill.skill)
-    ).all()
+    print("search_request",search_request)
+    # Build query text and embed it (prefer manual free-text query if provided)
+    if (getattr(search_request, 'query', None) or "").strip():
+        query_text = (search_request.query or "").strip()
+    else:
+        query_text = build_query_text(
+            title=search_request.title,
+            skills=search_request.skills or [],
+            experience=search_request.experience,
+            location=search_request.location,
+        )
     
-    # Convert SQLAlchemy objects to dictionaries
-    job_dicts = []
-    for job in jobs:
-        job_dict = {
-            'id': job.id,
-            'title': job.title,
-            'company': job.company,
-            'location': job.location,
-            'salary_range': job.salary_range,
-            'description': job.description,
-            'experience_min': job.experience_min,
-            'skills': [{'id': js.skill.id, 'name': js.skill.name} for js in job.skills]
-        }
-        job_dicts.append(job_dict)
-    
-    # Prepare search request for AI
+    print("query_text",query_text)
+    query_emb = get_query_embedding(query_text)
+    print("query_emb",len(query_emb))
+    # Stage 1: retrieve top-10 by embedding similarity
+    candidates = top_k_jobs_by_embedding(db, query_emb, k=10)
+    print("candidates",candidates)
+    # Fallback: if no embeddings yet, retrieve all jobs as candidates
+    if not candidates:
+        jobs = db.query(Job).options(
+            joinedload(Job.skills).joinedload(JobSkill.skill)
+        ).all()
+        candidates = [{
+            'id': j.id,
+            'title': j.title,
+            'company': j.company,
+            'location': j.location,
+            'salary_range': j.salary_range,
+            'description': j.description,
+            'experience_min': j.experience_min,
+            'skills': [{'id': js.skill.id, 'name': js.skill.name} for js in j.skills],
+        } for j in jobs]
+
+    # Stage 2: Re-rank with AI matcher
     search_criteria = {
         'title': search_request.title,
         'skills': search_request.skills,
         'experience': search_request.experience,
-        'location': search_request.location
+        'location': search_request.location,
     }
-    
-    # Get AI-matched jobs with scores
-    matched_jobs = match_jobs_with_ai(search_criteria, job_dicts)
-    print(matched_jobs)
-    # Filter out low-scoring jobs (optional)
-    matched_jobs = [job for job in matched_jobs if job.get('match_score', 0) > 0.3]
-    
+    matched_jobs = match_jobs_with_ai(search_criteria, candidates)
+    print("matched_jobs",matched_jobs)
+    matched_jobs = [job for job in matched_jobs if job.get('match_score', 0) >= 0.0]
+    print("matched_jobs",matched_jobs)  
     return matched_jobs
 
 def top_k_jobs_by_embedding(db: Session, query_embedding: List[float], k: int = 20) -> List[Dict[str, Any]]:

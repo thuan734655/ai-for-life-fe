@@ -147,7 +147,7 @@ export const JobMatcherPage = () => {
         try {
           const fd = new FormData();
           fd.append("file", file);
-          fd.append("desired_position", form.position || "");
+          fd.append("title", form.position || "");
           const url = `${API_BASE}${ENDPOINTS.uploadResume}`;
           console.log("[JobMatcher] POST", url);
           const res = await fetch(url, { method: "POST", body: fd });
@@ -207,6 +207,7 @@ export const JobMatcherPage = () => {
         try {
           const fd = new FormData();
           fd.append("file", file);
+          fd.append("title", form.position || "");
           const url = `${API_BASE}${ENDPOINTS.uploadResume}`;
           console.log("[JobMatcher] POST", url);
           const res = await fetch(url, { method: "POST", body: fd });
@@ -259,7 +260,7 @@ export const JobMatcherPage = () => {
         }
         const fd = new FormData();
         fd.append("file", cvFile);
-        fd.append("desired_position", form.position || "");
+        fd.append("title", form.position || "");
         const url = `${API_BASE}${ENDPOINTS.uploadResume}`;
         console.log("[JobMatcher] POST", url);
         const res = await fetch(url, {

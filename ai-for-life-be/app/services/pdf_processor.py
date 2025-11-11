@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.schemas.job import JobSearchRequest
 from app.crud.job import search_jobs_ai, top_k_jobs_by_embedding
-from app.ai.gemini_service import extract_text_from_pdf_ai_bytes, extract_resume_info_ai, choose_best_job_from_candidates
+from app.ai.gemini_service import extract_text_from_pdf_ai_bytes, extract_resume_info_ai, match_jobs_with_ai
 from app.ai.embedding_service import get_query_embedding
 
 try:
@@ -192,24 +192,20 @@ def process_resume_pdf(
         parts.append(f"experience: {ai_exp} years")
     query_text = " | ".join(parts) if parts else (desired_position or "")
 
-    # Compute query embedding and retrieve top-20 similar jobs
+    # Compute query embedding and retrieve top-10 similar jobs
     query_emb = get_query_embedding(query_text)
-    top20 = top_k_jobs_by_embedding(db, query_emb, k=20)
+    top10 = top_k_jobs_by_embedding(db, query_emb, k=10)
 
-    # If no embeddings available yet, fallback to rules-based match
-    candidates = top20 if top20 else search_jobs_ai(db, search_request)[:20]
+    # If no embeddings available yet, fallback to existing AI search (limited to 10)
+    candidates = top10 if top10 else search_jobs_ai(db, search_request)[:10]
 
-    # Ask Gemini to choose best among candidates
-    best = choose_best_job_from_candidates(query_text, candidates)
-    best_id = best.get("best_job_id")
-    reason = best.get("reason", "")
-
-    # Mark the best candidate
-    for c in candidates:
-        if c.get("id") == best_id:
-            c["is_best"] = True
-            c["best_reason"] = reason
-        else:
-            c["is_best"] = False
-
-    return candidates
+    # Re-rank top candidates using AI matcher
+    search_criteria = {
+        'title': search_request.title,
+        'skills': search_request.skills,
+        'experience': search_request.experience,
+        'location': search_request.location,
+    }
+    reranked = match_jobs_with_ai(search_criteria, candidates)
+    # keep top 10
+    return reranked[:10]

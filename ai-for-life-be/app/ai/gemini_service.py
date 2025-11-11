@@ -150,8 +150,14 @@ def match_jobs_with_ai(search_request: Dict[str, Any], jobs: List[Dict[str, Any]
                     search_request['title'].lower(),
                     job.get('title', '').lower()
                 )
-                score += title_similarity * 0.3
+                score += title_similarity * 0.25
                 reasons.append(f"Title similarity: {title_similarity:.2f}")
+                try:
+                    if search_request['title'].strip().lower() == job.get('title', '').strip().lower():
+                        score += 0.10
+                        reasons.append("Exact title match bonus: 0.10")
+                except Exception:
+                    pass
             
             # 2. Skills match (40% weight)
             if search_request.get('skills'):
@@ -160,7 +166,7 @@ def match_jobs_with_ai(search_request: Dict[str, Any], jobs: List[Dict[str, Any]
                 
                 if job_skills and search_skills:
                     skill_match_ratio = len(job_skills.intersection(search_skills)) / len(search_skills)
-                    score += skill_match_ratio * 0.4
+                    score += skill_match_ratio * 0.35
                     reasons.append(f"Skills match: {skill_match_ratio:.2f}")
             
             # 3. Experience match (20% weight)
@@ -181,9 +187,21 @@ def match_jobs_with_ai(search_request: Dict[str, Any], jobs: List[Dict[str, Any]
             # 4. Location match (10% weight)
             if search_request.get('location'):
                 location_match = search_request['location'].lower() in job.get('location', '').lower()
-                score += 0.1 if location_match else 0
+                score += 0.05 if location_match else 0
                 reasons.append(f"Location match: {location_match}")
-            
+
+            # 5. Embedding similarity (15% weight)
+            try:
+                emb_sim = float(job.get('embedding_similarity', 0.0))
+                if emb_sim < 0:
+                    emb_sim = 0.0
+                if emb_sim > 1:
+                    emb_sim = 1.0
+                score += emb_sim * 0.15
+                reasons.append(f"Embedding similarity: {emb_sim:.2f}")
+            except Exception:
+                pass
+        
             # Ensure score is between 0 and 1
             score = max(0, min(1, score))
             
@@ -192,8 +210,8 @@ def match_jobs_with_ai(search_request: Dict[str, Any], jobs: List[Dict[str, Any]
             job['match_reasons'] = reasons
             
             # Only include jobs that meet minimum criteria
-            if score >= 0.4:  # Adjust threshold as needed
-                matched_jobs.append(job)
+         # if score >= 0.4:  # Adjust threshold as needed
+            matched_jobs.append(job)
         
         # Sort by score in descending order
         return sorted(matched_jobs, key=lambda x: x['match_score'], reverse=True)

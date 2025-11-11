@@ -49,6 +49,7 @@ class JobSearchRequest(BaseModel):
     skills: List[str] = []
     experience: Optional[int] = None
     location: Optional[str] = None
+    query: Optional[str] = None
     
     class Config:
         json_schema_extra = {
@@ -56,6 +57,7 @@ class JobSearchRequest(BaseModel):
                 "title": "Backend Developer",
                 "skills": ["Python", "FastAPI", "SQL"],
                 "experience": 3,
-                "location": "Hanoi"
+                "location": "Hanoi",
+                "query": "backend developer python fastapi, 3 years, remote"
             }
         }
