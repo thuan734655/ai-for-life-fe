@@ -1,30 +1,25 @@
 from typing import Any, Dict, List
-from sqlalchemy.orm import Session, joinedload
 from app.ai.gemini_service import match_jobs_with_ai
-from app.models.job import Job
-from app.models.skill import JobSkill
 from app.schemas.job import JobCreate, JobSearchRequest
-from app.crud.skill import get_or_create_skill
-from app.models.embedding import JobEmbedding
-from app.ai.embedding_service import get_text_embedding, cosine_similarity, build_jd_text
+from app.ai.embedding_service import get_text_embedding, build_jd_text
 from app.ai.embedding_service import build_query_text, get_query_embedding
+from app.ai.chroma_store import get_jobs_collection
 import json
+import uuid
 
-def create_job(db: Session, payload: JobCreate) -> Job:
-    job = Job(
-        title=payload.title,
-        company=payload.company,
-        location=payload.location,
-        salary_range=payload.salary_range,
-        description=payload.description,
-        experience_min=payload.experience_min,
-    )
-    db.add(job)
-    db.flush()
-
-    for s in payload.skills:
-        skill = get_or_create_skill(db, s.name)
-        db.add(JobSkill(job_id=job.id, skill_id=skill.id, weight=s.weight))
+def create_job(payload: JobCreate) -> Dict[str, Any]:
+    # Generate a string ID for Chroma
+    job_id = str(uuid.uuid4())
+    job_meta = {
+        "job_id": job_id,
+        "title": payload.title,
+        "company": payload.company,
+        "location": payload.location,
+        "salary_range": payload.salary_range,
+        "description": payload.description,
+        "experience_min": payload.experience_min,
+        "skills": payload.skills or [],
+    }
 
     # Create and store JD embedding using standardized text format
     try:
@@ -34,27 +29,71 @@ def create_job(db: Session, payload: JobCreate) -> Job:
             location=payload.location,
             description=payload.description,
             experience_min=payload.experience_min,
-            skills=[s.name for s in payload.skills],
+            skills=payload.skills,
         )
         emb = get_text_embedding(jd_text)
         if emb:
-            db.add(JobEmbedding(job_id=job.id, embedding=json.dumps(emb)))
+            col = get_jobs_collection()
+            col.add(
+                ids=[job_id],
+                embeddings=[emb],
+                metadatas=[job_meta],
+                documents=[jd_text],
+            )
     except Exception:
         # Fail soft on embedding generation
         pass
 
-    db.commit()
-    db.refresh(job)
-    return job
+    # Return created job metadata
+    return {
+        "id": job_id,
+        **{k: v for k, v in job_meta.items() if k != "job_id"}
+    }
 
-def get_job(db: Session, job_id: int) -> Job | None:
-    return db.query(Job).options(
-        joinedload(Job.skills).joinedload(JobSkill.skill)
-    ).filter(Job.id == job_id).first()
+def get_job(job_id: str) -> Dict[str, Any] | None:
+    try:
+        col = get_jobs_collection()
+        res = col.get(ids=[str(job_id)], include=["metadatas", "documents"])
+        metas = (res.get("metadatas") or [[]])[0]
+        if not metas:
+            return None
+        meta = metas[0] or {}
+        return {
+            "id": str(job_id),
+            "title": meta.get("title"),
+            "company": meta.get("company"),
+            "location": meta.get("location"),
+            "salary_range": meta.get("salary_range"),
+            "description": meta.get("description"),
+            "experience_min": meta.get("experience_min"),
+            "skills": meta.get("skills") or [],
+        }
+    except Exception:
+        return None
 
-def list_jobs(db: Session) -> list[Job]:
-    return db.query(Job).all()
-def search_jobs_ai(db: Session, search_request: JobSearchRequest) -> List[Dict[str, Any]]:
+def list_jobs() -> List[Dict[str, Any]]:
+    try:
+        col = get_jobs_collection()
+        res = col.get(include=["ids", "metadatas"], limit=10000)
+        ids = res.get("ids") or []
+        metas = res.get("metadatas") or []
+        out: List[Dict[str, Any]] = []
+        for i, m in zip(ids, metas):
+            meta = m or {}
+            out.append({
+                "id": i,
+                "title": meta.get("title"),
+                "company": meta.get("company"),
+                "location": meta.get("location"),
+                "salary_range": meta.get("salary_range"),
+                "description": meta.get("description"),
+                "experience_min": meta.get("experience_min"),
+                "skills": meta.get("skills") or [],
+            })
+        return out
+    except Exception:
+        return []
+def search_jobs_ai(search_request: JobSearchRequest) -> List[Dict[str, Any]]:
     """
     Search for jobs using AI-powered matching
     """
@@ -74,23 +113,9 @@ def search_jobs_ai(db: Session, search_request: JobSearchRequest) -> List[Dict[s
     query_emb = get_query_embedding(query_text)
     print("query_emb",len(query_emb))
     # Stage 1: retrieve top-10 by embedding similarity
-    candidates = top_k_jobs_by_embedding(db, query_emb, k=10)
+    candidates = top_k_jobs_by_embedding(query_emb, k=10)
     print("candidates",candidates)
-    # Fallback: if no embeddings yet, retrieve all jobs as candidates
-    if not candidates:
-        jobs = db.query(Job).options(
-            joinedload(Job.skills).joinedload(JobSkill.skill)
-        ).all()
-        candidates = [{
-            'id': j.id,
-            'title': j.title,
-            'company': j.company,
-            'location': j.location,
-            'salary_range': j.salary_range,
-            'description': j.description,
-            'experience_min': j.experience_min,
-            'skills': [{'id': js.skill.id, 'name': js.skill.name} for js in j.skills],
-        } for j in jobs]
+    # No fallback to SQL: results come only from Chroma
 
     # Stage 2: Re-rank with AI matcher
     search_criteria = {
@@ -105,43 +130,37 @@ def search_jobs_ai(db: Session, search_request: JobSearchRequest) -> List[Dict[s
     print("matched_jobs",matched_jobs)  
     return matched_jobs
 
-def top_k_jobs_by_embedding(db: Session, query_embedding: List[float], k: int = 20) -> List[Dict[str, Any]]:
+def top_k_jobs_by_embedding(query_embedding: List[float], k: int = 20) -> List[Dict[str, Any]]:
     """Return top-k jobs most similar to the query embedding by cosine similarity."""
     if not query_embedding:
         return []
-    # Load all job embeddings and related jobs/skills
-    jobs = db.query(Job).options(
-        joinedload(Job.skills).joinedload(JobSkill.skill)
-    ).all()
-    # Map job_id -> job for quick lookup
-    job_map = {j.id: j for j in jobs}
-    # Retrieve embeddings
-    rows = db.query(JobEmbedding).all()
-    scored: List[tuple[float, Job]] = []
-    for row in rows:
-        try:
-            emb = json.loads(row.embedding)
-            sim = cosine_similarity(query_embedding, emb)
-            job = job_map.get(row.job_id)
-            if job is not None:
-                scored.append((sim, job))
-        except Exception:
-            continue
-    # Sort by similarity desc and take top-k
-    scored.sort(key=lambda x: x[0], reverse=True)
-    top = scored[:k]
-    # Convert to dicts
-    results: List[Dict[str, Any]] = []
-    for sim, job in top:
-        results.append({
-            'id': job.id,
-            'title': job.title,
-            'company': job.company,
-            'location': job.location,
-            'salary_range': job.salary_range,
-            'description': job.description,
-            'experience_min': job.experience_min,
-            'skills': [{'id': js.skill.id, 'name': js.skill.name} for js in job.skills],
-            'embedding_similarity': round(float(sim), 4),
-        })
-    return results
+    # Query Chroma for nearest neighbors
+    try:
+        col = get_jobs_collection()
+        q = col.query(
+            query_embeddings=[query_embedding],
+            n_results=k,
+            include=["ids", "distances", "metadatas", "documents"],
+        )
+        ids = (q.get("ids") or [[]])[0]
+        distances = (q.get("distances") or [[]])[0]
+        metadatas = (q.get("metadatas") or [[]])[0]
+        # Build results only from Chroma, preserving order
+        results: List[Dict[str, Any]] = []
+        for i, d, meta in zip(ids, distances, metadatas):
+            # Convert cosine distance to similarity: sim = 1 - distance
+            sim = 1.0 - float(d) if d is not None else 0.0
+            results.append({
+                'id': i,
+                'title': (meta or {}).get('title'),
+                'company': (meta or {}).get('company'),
+                'location': (meta or {}).get('location'),
+                'salary_range': (meta or {}).get('salary_range'),
+                'description': (meta or {}).get('description'),
+                'experience_min': (meta or {}).get('experience_min'),
+                'skills': ((meta or {}).get('skills') or []),
+                'embedding_similarity': round(float(sim), 4),
+            })
+        return results
+    except Exception:
+        return []

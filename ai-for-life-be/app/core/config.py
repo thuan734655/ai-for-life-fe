@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     APP_NAME: str = "JobMatcherAPI"
     APP_DEBUG: bool = True
 
+    # ChromaDB settings
+    CHROMA_DB_PATH: str = "./.chroma"
+    CHROMA_COLLECTION_JOBS: str = "jobs"
+
     class Config:
         env_file = ".env"
         case_sensitive = True

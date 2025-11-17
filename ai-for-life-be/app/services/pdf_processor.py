@@ -3,7 +3,6 @@ from typing import Dict, List, Optional, Any
 
 import fitz  # PyMuPDF
 from fastapi import UploadFile, HTTPException
-from sqlalchemy.orm import Session
 
 from app.schemas.job import JobSearchRequest
 from app.crud.job import search_jobs_ai, top_k_jobs_by_embedding
@@ -126,7 +125,6 @@ def _extract_salary(s: str) -> float:
 
 
 def process_resume_pdf(
-    db: Session,
     file: UploadFile,
     desired_position: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
@@ -194,10 +192,10 @@ def process_resume_pdf(
 
     # Compute query embedding and retrieve top-10 similar jobs
     query_emb = get_query_embedding(query_text)
-    top10 = top_k_jobs_by_embedding(db, query_emb, k=10)
+    top10 = top_k_jobs_by_embedding(query_emb, k=10)
 
     # If no embeddings available yet, fallback to existing AI search (limited to 10)
-    candidates = top10 if top10 else search_jobs_ai(db, search_request)[:10]
+    candidates = top10 if top10 else search_jobs_ai(search_request)[:10]
 
     # Re-rank top candidates using AI matcher
     search_criteria = {

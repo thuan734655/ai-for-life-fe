@@ -2,20 +2,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from app.core.config import settings
-from app.db.base import Base
-from app.db.session import engine
-from app.routers import jobs, users, match
-from app.models import job as _m_job, skill as _m_skill, user as _m_user  # noqa: F401
-from app.models import embedding as _m_embedding  # noqa: F401
-
-
-def init_db():
-    Base.metadata.create_all(bind=engine)
+from app.routers import jobs, match
 
 
 tags_metadata = [
     {"name": "jobs", "description": "Quản lý và truy vấn Job"},
-    {"name": "users", "description": "Quản lý ứng viên"},
     {"name": "match", "description": "Tính điểm phù hợp job"},
 ]
 
@@ -38,11 +29,7 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["*"]
 )
-
-init_db()
-
 app.include_router(jobs.router)
-app.include_router(users.router)
 app.include_router(match.router)
 
 
