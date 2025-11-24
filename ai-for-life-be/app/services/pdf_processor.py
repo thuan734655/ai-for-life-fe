@@ -189,21 +189,24 @@ def process_resume_pdf(
     if ai_exp is not None:
         parts.append(f"experience: {ai_exp} years")
     query_text = " | ".join(parts) if parts else (desired_position or "")
-
+    print("query_text",query_text)
     # Compute query embedding and retrieve top-10 similar jobs
     query_emb = get_query_embedding(query_text)
     top10 = top_k_jobs_by_embedding(query_emb, k=10)
+    return top10
 
-    # If no embeddings available yet, fallback to existing AI search (limited to 10)
-    candidates = top10 if top10 else search_jobs_ai(search_request)[:10]
+    # # If no embeddings available yet, fallback to existing AI search (limited to 10)
+    # candidates = top10 if top10 else search_jobs_ai(search_request)[:10]
 
-    # Re-rank top candidates using AI matcher
-    search_criteria = {
-        'title': search_request.title,
-        'skills': search_request.skills,
-        'experience': search_request.experience,
-        'location': search_request.location,
-    }
-    reranked = match_jobs_with_ai(search_criteria, candidates)
-    # keep top 10
-    return reranked[:10]
+    # # Re-rank top candidates using AI matcher
+    # search_criteria = {
+    #     'title': search_request.title,
+    #     'skills': search_request.skills,
+    #     'experience': search_request.experience,
+    #     'location': search_request.location,
+    # }
+    # reranked = match_jobs_with_ai(search_criteria, candidates)
+    # # Only keep jobs with at least 30% match score (0.3)
+    # reranked = [job for job in reranked if job.get('match_score', 0) >= 0.3]
+    # # keep top 10
+    # return reranked[:10]

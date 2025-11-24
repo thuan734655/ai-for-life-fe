@@ -161,11 +161,26 @@ def match_jobs_with_ai(search_request: Dict[str, Any], jobs: List[Dict[str, Any]
             
             # 2. Skills match (40% weight)
             if search_request.get('skills'):
-                job_skills = {s['name'].lower() for s in job.get('skills', [])}
-                search_skills = {s.lower() for s in search_request['skills']}
+                # Normalize job skills: support both list[str] and list[dict{name: str}]
+                raw_job_skills = job.get('skills', []) or []
+                job_skills_set = set()
+                try:
+                    for s in raw_job_skills:
+                        if isinstance(s, str):
+                            name = s.strip().lower()
+                        elif isinstance(s, dict):
+                            name = str(s.get('name') or s.get('skill') or s.get('label') or '').strip().lower()
+                        else:
+                            name = str(s).strip().lower()
+                        if name:
+                            job_skills_set.add(name)
+                except Exception:
+                    job_skills_set = set()
+
+                search_skills_set = {str(s).strip().lower() for s in (search_request.get('skills') or []) if str(s).strip()}
                 
-                if job_skills and search_skills:
-                    skill_match_ratio = len(job_skills.intersection(search_skills)) / len(search_skills)
+                if job_skills_set and search_skills_set:
+                    skill_match_ratio = len(job_skills_set.intersection(search_skills_set)) / len(search_skills_set)
                     score += skill_match_ratio * 0.35
                     reasons.append(f"Skills match: {skill_match_ratio:.2f}")
             

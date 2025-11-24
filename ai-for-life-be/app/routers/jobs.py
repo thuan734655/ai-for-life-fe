@@ -8,6 +8,7 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 @router.post("", response_model=Dict[str, Any])
 def create(payload: JobCreate):
+    print("payload",payload)
     return create_job(payload)
 
 @router.get("", response_model=List[Dict[str, Any]])

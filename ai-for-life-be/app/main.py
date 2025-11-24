@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from app.core.config import settings
 from app.routers import jobs, match
-
+print("hello các bạn")
 
 tags_metadata = [
     {"name": "jobs", "description": "Quản lý và truy vấn Job"},
